@@ -30,65 +30,226 @@
             z-index: 1000;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
         }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body>
     <div class="info">
         <h3>Cámaras Chascomús</h3>
         <p>Mapa interactivo con ubicaciones</p>
+        <p>Color indica cantidad de casos</p>
     </div>
+    
     <div id="map"></div>
+    
+    <div id="loading" class="loading">
+        Cargando ubicaciones...
+    </div>
+
+    <div class="legend" id="legend">
+        <h4>Leyenda - Casos registrados</h4>
+        <div id="legend-items"></div>
+    </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Leaflet KML -->
-    <script src="https://unpkg.com/leaflet-kml@1.0.2/dist/leaflet-kml.js"></script>
     
     <script>
+        // Ocultar loading cuando todo cargue
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        // Mostrar error
+        function showError(message) {
+            document.getElementById('loading').innerHTML = 
+                '<div style="color: red;">Error: ' + message + '</div>';
+        }
+
+        // Función para generar color azul degradado según cantidad
+        function getColorByCases(cases, maxCases) {
+            // Normalizar la cantidad (0 a 1)
+            const intensity = cases / maxCases;
+            
+            // Calcular componentes RGB para azul degradado
+            const red = Math.floor(100 + (155 * intensity));   // De 100 a 255
+            const green = Math.floor(100 + (155 * intensity)); // De 100 a 255
+            const blue = Math.floor(200 - (100 * intensity));  // De 200 a 100
+            
+            return `rgb(${red}, ${green}, ${blue})`;
+        }
+
+        // Función para crear icono circular con color
+        function createCircleIcon(color, size = 15) {
+            return L.divIcon({
+                className: 'custom-circle-marker',
+                html: `<div style="background-color: ${color}; 
+                                  width: ${size}px; 
+                                  height: ${size}px; 
+                                  border-radius: 50%; 
+                                  border: 2px solid white;
+                                  box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
+                iconSize: [size, size],
+                iconAnchor: [size/2, size/2]
+            });
+        }
+
         // Inicializar el mapa
-        const map = L.map('map').setView([-35.5736, -58.0080], 13); // Coordenadas aproximadas de Chascomús
+        const map = L.map('map').setView([-35.5736, -58.0080], 13);
         
         // Añadir capa de OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
-        
-        // URL del archivo KML en GitHub (usa el enlace raw)
+
+        // URL del archivo KML en GitHub (raw)
         const kmlUrl = 'https://raw.githubusercontent.com/JAVIERGAR777/prueba-de-camaraschasco/main/camaras-chascomus.kml';
         
-        // Cargar el archivo KML
-        fetch(kmlUrl)
-            .then(response => response.text())
-            .then(kmlText => {
-                // Crear un blob con el contenido KML
-                const kmlBlob = new Blob([kmlText], { type: 'application/xml' });
-                const kmlUrl = URL.createObjectURL(kmlBlob);
+        // Función para crear leyenda
+        function createLegend(maxCases) {
+            const legendItems = document.getElementById('legend-items');
+            legendItems.innerHTML = '';
+            
+            const steps = 5;
+            for (let i = steps; i >= 1; i--) {
+                const cases = Math.floor((i / steps) * maxCases);
+                const color = getColorByCases(cases, maxCases);
                 
-                // Crear capa KML
-                const kmlLayer = new L.KML(kmlUrl);
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <div class="legend-color" style="background-color: ${color}"></div>
+                    <span>${cases} casos</span>
+                `;
+                legendItems.appendChild(item);
+            }
+        }
+
+        // Función para parsear KML y añadir puntos con colores
+        function parseKMLAndAddToMap(kmlText) {
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(kmlText, "text/xml");
                 
-                // Añadir la capa KML al mapa
-                map.addLayer(kmlLayer);
+                const placemarks = xmlDoc.getElementsByTagName("Placemark");
                 
-                // Ajustar el zoom para mostrar todos los marcadores
-                const bounds = kmlLayer.getBounds();
-                if (bounds.isValid()) {
-                    map.fitBounds(bounds);
+                if (placemarks.length === 0) {
+                    showError("No se encontraron ubicaciones en el KML");
+                    return;
                 }
                 
-                // Opcional: añadir interactividad a los marcadores
-                kmlLayer.on('click', function(e) {
-                    if (e.layer && e.layer.feature) {
-                        const feature = e.layer.feature;
-                        if (feature.properties && feature.properties.name) {
-                            alert('Cámara: ' + feature.properties.name);
+                let bounds = L.latLngBounds();
+                const markers = [];
+                
+                // Generar datos aleatorios para casos
+                const casesData = [];
+                for (let i = 0; i < placemarks.length; i++) {
+                    casesData.push(Math.floor(Math.random() * 100) + 1); // 1-100 casos aleatorios
+                }
+                
+                // Encontrar máximo de casos para la escala de colores
+                const maxCases = Math.max(...casesData);
+                
+                // Crear leyenda
+                createLegend(maxCases);
+                
+                // Procesar cada placemark
+                for (let i = 0; i < placemarks.length; i++) {
+                    const placemark = placemarks[i];
+                    const coordinatesElement = placemark.getElementsByTagName("coordinates")[0];
+                    
+                    if (coordinatesElement) {
+                        const coordsText = coordinatesElement.textContent.trim();
+                        const coords = coordsText.split(',').map(coord => parseFloat(coord));
+                        
+                        if (coords.length >= 2) {
+                            const latlng = L.latLng(coords[1], coords[0]);
+                            const casos = casesData[i];
+                            const color = getColorByCases(casos, maxCases);
+                            
+                            // Crear marcador circular con color
+                            const marker = L.marker(latlng, {
+                                icon: createCircleIcon(color, 15 + (casos / maxCases * 10)) // Tamaño proporcional
+                            }).addTo(map);
+                            
+                            // Popup con información
+                            const nameElement = placemark.getElementsByTagName("name")[0];
+                            const name = nameElement ? nameElement.textContent : `Cámara ${i+1}`;
+                            
+                            marker.bindPopup(`
+                                <b>${name}</b><br>
+                                <b>Casos registrados:</b> ${casos}<br>
+                                <b>Coordenadas:</b> ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}
+                            `);
+                            
+                            markers.push(marker);
+                            bounds.extend(latlng);
                         }
                     }
-                });
+                }
+                
+                // Ajustar vista del mapa
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+                
+                hideLoading();
+                
+            } catch (error) {
+                showError("Error parsing KML: " + error.message);
+                console.error("KML parsing error:", error);
+            }
+        }
+
+        // Cargar el archivo KML
+        fetch(kmlUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.text();
+            })
+            .then(kmlText => {
+                parseKMLAndAddToMap(kmlText);
             })
             .catch(error => {
                 console.error('Error cargando el KML:', error);
-                alert('Error al cargar las ubicaciones. Verifica la consola para más detalles.');
+                showError("No se pudo cargar el archivo KML. Verifica la URL: " + kmlUrl);
             });
     </script>
 </body>
