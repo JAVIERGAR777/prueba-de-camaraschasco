@@ -1,4 +1,95 @@
-
 <!DOCTYPE html>
 <html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Cámaras - Chascomús</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+        
+        .info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h3>Cámaras Chascomús</h3>
+        <p>Mapa interactivo con ubicaciones</p>
+    </div>
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet KML -->
+    <script src="https://unpkg.com/leaflet-kml@1.0.2/dist/leaflet-kml.js"></script>
+    
+    <script>
+        // Inicializar el mapa
+        const map = L.map('map').setView([-35.5736, -58.0080], 13); // Coordenadas aproximadas de Chascomús
+        
+        // Añadir capa de OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // URL del archivo KML en GitHub (usa el enlace raw)
+        const kmlUrl = 'https://raw.githubusercontent.com/JAVIERGAR777/prueba-de-camaraschasco/main/camaras-chascomus.kml';
+        
+        // Cargar el archivo KML
+        fetch(kmlUrl)
+            .then(response => response.text())
+            .then(kmlText => {
+                // Crear un blob con el contenido KML
+                const kmlBlob = new Blob([kmlText], { type: 'application/xml' });
+                const kmlUrl = URL.createObjectURL(kmlBlob);
+                
+                // Crear capa KML
+                const kmlLayer = new L.KML(kmlUrl);
+                
+                // Añadir la capa KML al mapa
+                map.addLayer(kmlLayer);
+                
+                // Ajustar el zoom para mostrar todos los marcadores
+                const bounds = kmlLayer.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds);
+                }
+                
+                // Opcional: añadir interactividad a los marcadores
+                kmlLayer.on('click', function(e) {
+                    if (e.layer && e.layer.feature) {
+                        const feature = e.layer.feature;
+                        if (feature.properties && feature.properties.name) {
+                            alert('Cámara: ' + feature.properties.name);
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error cargando el KML:', error);
+                alert('Error al cargar las ubicaciones. Verifica la consola para más detalles.');
+            });
+    </script>
+</body>
 </html>
